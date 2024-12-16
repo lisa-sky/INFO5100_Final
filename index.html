@@ -1,1 +1,228 @@
+<html>
+<head>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <title>Drug Overdose Related Deaths in the U.S.</title>
+    <style>
+      body {
+          font-family: Arial, sans-serif;
+          background-color: #0d1117;
+          color: #d1d5da;
+          margin: 0;
+          padding: 20px;
+      }
 
+      h1, h2 {
+          text-align: center;
+          color: #58a6ff;
+      }
+
+      h3 {
+        text-align: center;
+        color: white;
+      }
+
+      .content-container {
+          display: flex;
+          justify-content: center;
+          align-items: flex-start;
+          gap: 30px;
+          margin-top: 20px;
+      }
+
+      .filters {
+          display: flex;
+          flex-direction: column;
+          width: 250px;
+          gap: 10px;
+          background-color: #161b22;
+          padding: 15px;
+          border-radius: 8px;
+          border: 1px solid #30363d;
+      }
+
+      .filters label {
+          margin-bottom: 5px;
+      }
+
+      .filters select {
+          padding: 5px;
+          background-color: #0d1117;
+          color: white;
+          border: 1px solid #30363d;
+          border-radius: 4px;
+      }
+
+      .graph-container {
+          flex-grow: 1;
+          width: 100%;
+          background-color: #161b22;
+          padding: 10px;
+          border-radius: 8px;
+          border: 1px solid #30363d;
+      }
+
+      svg {
+          width: 100%;
+          height: 100%;
+      }
+    </style>
+</head>
+<body>
+    <h1>INFO 5100 Final Project</h1>
+    <h2 id="graph1">Graph 1: Dynamic Visualization of Drug Overdose Deaths</h2>
+    <p>This dynamic line graph visualizes the percentage of drug-related deaths in the United States over time, spanning from 1999 to 2018. The visualization allows users to interactively filter the data to explore specific demographic groups and drug types. Here is a breakdown of its features and purpose:</p>
+
+    <div class="content-container">
+        <div class="filters">
+            <label for="sex">Select Sex:</label>
+            <select id="sex"></select>
+
+            <label for="age-group">Select Age Group:</label>
+            <select id="age-group"></select>
+
+            <label for="race">Select Race:</label>
+            <select id="race"></select>
+
+            <label for="drug-type">Select Drug Type:</label>
+            <select id="drug-type"></select>
+        </div>
+
+        <div class="graph-container">
+            <h3>Percentage of Drug-Related Deaths</h3>
+            <svg id="chart" preserveAspectRatio="xMidYMid meet" viewBox="0 0 900 500"></svg>
+        </div>
+    </div>
+
+    <script>
+      const margin = { top: 20, right: 30, bottom: 50, left: 50 },
+            width = 900 - margin.left - margin.right,
+            height = 500 - margin.top - margin.bottom;
+
+      const svg = d3.select("#chart")
+          .append("g")
+          .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const xScale = d3.scaleLinear().range([0, width]);
+      const yScale = d3.scaleLinear().range([height, 0]);
+
+      const line = d3.line()
+          .x(d => xScale(d.year))
+          .y(d => yScale(d.percentage));
+
+      d3.csv("data/first_data.csv").then((data) => {
+          data.forEach(d => {
+              d.year = +d.year;
+              d.percentage = +d.percentage;
+
+              if (d.race === "Black" || d.race === "Black or African American") {
+                  d.race = "Black or African American";
+              } else if (d.race === "Asian" || d.race === "Asian or Pacific Islander") {
+                  d.race = "Asian or Pacific Islander";
+              }
+          });
+
+          const sexes = [...new Set(data.map(d => d.sex))];
+          const ages = ["All", ...new Set(data.map(d => d.age))];
+          const races = ["All", ...new Set(data.map(d => d.race))];
+          const drugTypes = [...new Set(data.map(d => d.drug_type))];
+
+          populateDropdown("#sex", sexes);
+          populateDropdown("#age-group", ages);
+          populateDropdown("#race", races);
+          populateDropdown("#drug-type", drugTypes);
+
+          d3.selectAll("select").on("change", () => updateChart(data));
+
+          updateChart(data);
+
+          function populateDropdown(selector, options) {
+              const dropdown = d3.select(selector);
+              dropdown.selectAll("option")
+                  .data(options.filter(d => d !== "NA"))
+                  .enter()
+                  .append("option")
+                  .text(d => d)
+                  .attr("value", d => d);
+          }
+
+          function updateChart(filteredData) {
+              const sex = d3.select("#sex").node().value;
+              const age = d3.select("#age-group").node().value;
+              const race = d3.select("#race").node().value;
+              const drugType = d3.select("#drug-type").node().value;
+
+              const chartData = filteredData.filter(d =>
+                  (sex === "All" || d.sex === sex) &&
+                  (age === "All" || d.age === age) &&
+                  (race === "All" || d.race === race) &&
+                  (drugType === "All" || d.drug_type === drugType)
+              );
+
+              svg.selectAll("*").remove();
+
+              if (chartData.length === 0) {
+                  svg.append("text")
+                      .attr("x", width / 2)
+                      .attr("y", height / 2)
+                      .attr("text-anchor", "middle")
+                      .style("fill", "white")
+                      .style("font-size", "16px")
+                      .text("No data available for the selected filters.");
+                  return;
+              }
+
+              const aggregatedData = d3.groups(chartData, d => d.year)
+                  .map(([year, values]) => ({
+                      year,
+                      percentage: d3.mean(values, v => v.percentage)
+                  }));
+
+              xScale.domain(d3.extent(aggregatedData, d => d.year));
+              yScale.domain([0, d3.max(aggregatedData, d => d.percentage)]);
+
+              svg.append("g")
+                  .attr("transform", `translate(0, ${height})`)
+                  .call(d3.axisBottom(xScale).tickFormat(d3.format("d")));
+
+              svg.append("g").call(d3.axisLeft(yScale));
+
+              svg.append("text")
+                  .attr("transform", `translate(${width / 2}, ${height + 40})`)
+                  .style("text-anchor", "middle")
+                  .style("fill", "white")
+                  .style("font-size", "0.7em")
+                  .style("font-weight", "bold")
+                  .text("Year");
+
+              svg.append("text")
+                  .attr("transform", "rotate(-90)")
+                  .attr("x", -height / 2)
+                  .attr("y", -30)
+                  .style("text-anchor", "middle")
+                  .style("fill", "white")
+                  .style("font-size", "0.7em")
+                  .style("font-weight", "bold")
+                  .text("Percentage of Deaths");
+
+
+              svg.append("path")
+                  .datum(aggregatedData)
+                  .attr("fill", "none")
+                  .attr("stroke", "#C5E7FF")
+                  .attr("stroke-width", 2)
+                  .attr("d", line);
+
+              svg.selectAll(".dot")
+                  .data(aggregatedData)
+                  .enter()
+                  .append("circle")
+                  .attr("class", "dot")
+                  .attr("cx", d => xScale(d.year))
+                  .attr("cy", d => yScale(d.percentage))
+                  .attr("r", 5)
+                  .attr("fill", "#58a6ff");
+          }
+      });
+    </script>
+</body>
+</html>
