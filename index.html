@@ -65,6 +65,24 @@
           width: 100%;
           height: 100%;
       }
+
+    .bar {
+      fill: lightblue;
+    }
+    .bar-text {
+      display: block;
+      fill: black;
+      font-size: 12px;
+    }
+    .axis-label {
+      font-size: 12px;
+      text-anchor: middle;
+    }
+    #slider {
+      margin: 20px;
+    }
+
+
     </style>
 </head>
 <body>
@@ -223,6 +241,125 @@
                   .attr("fill", "#58a6ff");
           }
       });
+
     </script>
+
+<!-- GRAPH 2 -->
+
+<h2>Graph 2: Drug-Related Deaths by State</h2>
+<p>This visualization highlights drug-related deaths by state across the United States, highlighting geographic disparities in death rates by region.</p>
+
+<div id="slider">
+  <label for="year-slider">Select Year: </label>
+  <input type="range" id="year-slider" min="2012" max="2021" step="1" value="2012">
+  <span id="current-year">2012</span>
+</div>
+<svg id="barChart"></svg>
+
+<script>
+
+
+  const svg2 = d3.select('svg#barChart')
+    .append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const tooltip = d3.select("body").append("div")
+    .attr("class", "tooltip");
+
+  d3.csv('data/data.csv').then(data => {
+    data.forEach(d => {
+      d.Year = new Date(d.Date).getFullYear();
+    });
+
+    let selectedYear = 2012;
+    updateChart(data, selectedYear);
+
+    const slider = d3.select('#year-slider');
+    const yearDisplay = d3.select('#current-year');
+
+    slider.on('input', function() {
+      selectedYear = +this.value;
+      yearDisplay.text(selectedYear);
+      updateChart(data, selectedYear);
+    });
+  });
+
+  function updateChart(data, year) {
+  const filteredData = data
+    .filter(d => d.Year === year)
+    .filter(d => d['Injury State'] || d['Residence State']) //remove "unknown"
+    .reduce((acc, d) => {
+      const location = d['Injury State'] || d['Residence State'];
+      acc[location] = (acc[location] || 0) + 1;
+      return acc;
+    }, {});
+
+    const aggregatedData = Object.entries(filteredData)
+      .map(([state, count]) => ({ state, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // update chart
+    svg2.selectAll('*').remove();
+
+    const x = d3.scaleBand()
+      .domain(aggregatedData.map(d => d.state))
+      .range([0, width])
+      .padding(0.2);
+
+    const y = d3.scaleLog() // log scale
+    .domain([1, d3.max(aggregatedData, d => d.count)])
+    .nice()
+    .range([height, 0]);
+
+    svg2.selectAll('.bar')
+    .data(aggregatedData)
+    .enter().append('rect')
+    .attr('class', 'bar')
+    .attr('x', d => x(d.state))
+    .attr('y', d => y(d.count))
+    .attr('height', d => height - y(d.count))
+    .attr('width', x.bandwidth());
+
+    //value display
+    svg2.selectAll('.bar-text')
+    .data(aggregatedData)
+    .enter().append('text')
+    .attr('class', 'bar-text')
+    .attr('x', d => x(d.state) + x.bandwidth() / 2)
+    .attr('y', d => y(d.count) - 5)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '12px')
+    .attr('fill', 'black')
+    .text(d => d.count);
+
+    svg2.append('g')
+      .attr('transform', `translate(0, ${height})`)
+      .call(d3.axisBottom(x).tickSize(0))
+      .selectAll('text')
+      .style('text-anchor', 'end')
+      .attr('dx', '-.8em')
+      .attr('dy', '.15em')
+      .attr('transform', 'rotate(-40)');
+
+    svg2.append('g').call(d3.axisLeft(y).ticks(5, "s"));
+
+    svg2.append('text')
+      .attr('x', width / 2)
+      .attr('y', height + 50)
+      .attr('class', 'axis-label')
+      .text('State');
+
+    svg2.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -height / 2)
+      .attr('y', -40)
+      .attr('class', 'axis-label')
+      .text('Number of Deaths');
+  }
+
+  </script>
 </body>
 </html>
